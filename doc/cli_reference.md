@@ -158,3 +158,71 @@ quoted with single quotes. For example:
 
     plover -s plover_send_command "set_config:'translation_frame_opacity':90"
 ````
+
+(dictionary-audit)=
+
+## Dictionary Compatibility Audit
+
+The `plover_dict_audit` console script performs an offline, exhaustive
+compatibility check between an old and a new plain dictionary stack. It
+explores every stroke sequence over a finite raw stroke alphabet and compares
+the text produced after each stroke, using an isolated native translator and
+formatter: no keyboard is connected, no external operation is executed and the
+audited dictionaries are never modified.
+
+    plover -s plover_dict_audit audit_spec.json [--json report.json]
+
+The audit specification is a JSON document:
+
+```json
+{
+  "old": [{"path": "old/main.json", "enabled": true}],
+  "new": [{"path": "new/main.json", "enabled": true}],
+  "strokes": ["S", "T", "E", "*"],
+  "undo_levels": 100,
+  "start_attached": false,
+  "start_capitalized": false,
+  "space_char": " ",
+  "space_placement": "Before Output",
+  "budget": {
+    "max_states": 100000,
+    "max_transitions": 2000000,
+    "timeout_seconds": 600
+  }
+}
+```
+
+Dictionary entries may also be provided inline as
+`{"mappings": {"S": "some text"}}` instead of `path`. The scope is the native
+English Stenotype pure-text behavior: multi-stroke re-segmentation, prefixes
+and implicit suffixes, attach/glue (including unbounded loops), orthography,
+forward case and mode, punctuation, word-end, carry capitalization, look-ahead
+and undo within the recoverable history. Plugin metas and macros,
+retro-case/retro-currency, key combinations, engine commands and undo past the
+recoverable history make the affected branch leave the audit domain; an old
+side domain exit excludes the branch from the guarantee, while a new side
+domain exit on a covered branch is an incompatibility.
+
+The verdict is one of:
+
+```{describe} compatible
+Every reachable semantic state and every alphabet successor was covered and
+the text after each stroke matches. The report contains the coverage evidence
+(state, transition and merge counts, reached depth and out-of-domain branches)
+and the suffix horizon used to merge unbounded attach/glue loops.
+```
+
+```{describe} incompatible
+The shortest counterexample is reported, together with the first differing
+stroke (or the new side domain exit), and confirmed by an independent isolated
+native replay.
+```
+
+```{describe} inconclusive
+The configured resource budget was exhausted before the reachable product
+state space could be closed. No compatibility claim is made; the partial
+coverage evidence is still reported.
+```
+
+Exit codes are `0` (compatible), `1` (incompatible), `2` (inconclusive), `3`
+(specification error) and `4` (internal replay verification failure).
